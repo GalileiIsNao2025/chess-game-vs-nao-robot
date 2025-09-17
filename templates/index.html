@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>Scacchi</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='chessboardjs-1.0.0/css/chessboard-1.0.0.min.css') }}">
+  <style>
+    #board { width: 400px; margin: 20px auto; }
+    #resetGame { display: block; margin: 10px auto; padding: 10px 20px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div id="board"></div>
+  <button id="resetGame">Nuova partita</button>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <script src="{{ url_for('static', filename='chessboardjs-1.0.0/js/chessboard-1.0.0.min.js') }}"></script>
+
+  <script>
+    const chess = new Chess();
+    const board = Chessboard('board', {
+      position: 'start',
+      draggable: true,
+      pieceTheme: '/static/chessboardjs-1.0.0/img/chesspieces/wikipedia/{piece}.png',
+      onDrop: onDropHandler
+    });
+
+    let gameMoves = [];      // Lista di UCI puro, es. ["e2e4","e7e5",...]
+    let waitingForAI = false;
+
+    function formatMove(move) {
+      // Se è cattura (flag 'c'), inserisce "x" fra from e to
+      if (move.flags.includes('c')) {
+        return move.from + 'x' + move.to + (move.promotion || '');
+      } else {
+        return move.from + move.to + (move.promotion || '');
+      }
+    }
+
+    function onDropHandler(source, target) {
+      if (waitingForAI) return 'snapback';
+      const move = chess.move({ from: source, to: target, promotion: 'q' });
+      if (move === null) return 'snapback';
+
+      const formattedMove = formatMove(move);
+      gameMoves.push(formattedMove.replace('x', '')); // salvo "e2e4", senza "x"
+
+      // Avviso il server della mossa
+      fetch("/post_user_move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ move: formattedMove })
+      });
+
+      waitingForAI = true;
+      setTimeout(() => getAIMove(), 300);
+    }
+
+    function getAIMove() {
+      fetch("/getmove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moves: gameMoves })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.move) {
+          // data.move è UCI puro (es. "e7e5")
+          const move = chess.move({
+            from: data.move.slice(0, 2),
+            to: data.move.slice(2, 4),
+            promotion: data.move[4] || 'q'
+          });
+          if (move !== null) {
+            // Chess.js capisce da flags se è cattura
+            const formattedMove = formatMove(move);  // es. "e7xe5"
+            gameMoves.push(formattedMove.replace('x', '')); // salvo "e7e5"
+            board.position(chess.fen());
+          }
+        }
+        waitingForAI = false;
+      });
+    }
+
+    document.getElementById("resetGame").addEventListener("click", () => {
+      chess.reset();
+      board.start();
+      gameMoves = [];
+      waitingForAI = false;
+    });
+  </script>
+</body>
+</html>
