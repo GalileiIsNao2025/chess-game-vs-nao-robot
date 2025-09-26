@@ -26,11 +26,10 @@
       onDrop: onDropHandler
     });
 
-    let gameMoves = [];      // Lista di UCI puro, es. ["e2e4","e7e5",...]
+    let gameMoves = [];      // Lista delle mosse UCI pure, es. ["e2e4","e7e5",...]
     let waitingForAI = false;
 
     function formatMove(move) {
-      // Se è cattura (flag 'c'), inserisce "x" fra from e to
       if (move.flags.includes('c')) {
         return move.from + 'x' + move.to + (move.promotion || '');
       } else {
@@ -43,14 +42,16 @@
       const move = chess.move({ from: source, to: target, promotion: 'q' });
       if (move === null) return 'snapback';
 
-      const formattedMove = formatMove(move);
-      gameMoves.push(formattedMove.replace('x', '')); // salvo "e2e4", senza "x"
+      const formattedMove = formatMove(move); // es. "e2xe4"
+      const uciMove = formattedMove.replace('x', ''); // es. "e2e4"
 
-      // Avviso il server della mossa
+      gameMoves.push(uciMove);
+
+      // Invio della mossa al server
       fetch("/post_user_move", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ move: formattedMove })
+        body: JSON.stringify({ formatted: formattedMove, uci: uciMove })
       });
 
       waitingForAI = true;
@@ -58,29 +59,24 @@
     }
 
     function getAIMove() {
-      fetch("/getmove", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ moves: gameMoves })
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.move) {
-          // data.move è UCI puro (es. "e7e5")
-          const move = chess.move({
-            from: data.move.slice(0, 2),
-            to: data.move.slice(2, 4),
-            promotion: data.move[4] || 'q'
-          });
-          if (move !== null) {
-            // Chess.js capisce da flags se è cattura
-            const formattedMove = formatMove(move);  // es. "e7xe5"
-            gameMoves.push(formattedMove.replace('x', '')); // salvo "e7e5"
-            board.position(chess.fen());
+      fetch("/getmove", { method: "GET" })
+        .then(response => response.json())
+        .then(data => {
+          if (data.move) {
+            const move = chess.move({
+              from: data.move.slice(0, 2),
+              to: data.move.slice(2, 4),
+              promotion: data.move[4] || 'q'
+            });
+            if (move !== null) {
+              const formattedMove = formatMove(move);
+              const uciMove = formattedMove.replace('x', '');
+              gameMoves.push(uciMove);
+              board.position(chess.fen());
+            }
           }
-        }
-        waitingForAI = false;
-      });
+          waitingForAI = false;
+        });
     }
 
     document.getElementById("resetGame").addEventListener("click", () => {
