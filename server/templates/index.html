@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>Scacchi</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='chessboardjs-1.0.0/css/chessboard-1.0.0.min.css') }}">
+  <style>
+    #board { width: 400px; margin: 20px auto; }
+  </style>
+</head>
+<body>
+  <div id="board"></div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <script src="{{ url_for('static', filename='chessboardjs-1.0.0/js/chessboard-1.0.0.min.js') }}"></script>
+
+  <script>
+    const chess = new Chess();
+    const board = Chessboard('board', {
+      position: 'start',
+      draggable: true,
+      pieceTheme: '/static/chessboardjs-1.0.0/img/chesspieces/wikipedia/{piece}.png',
+      onDrop: onDropHandler
+    });
+
+    let gameMoves = [];      // Lista delle mosse UCI pure, es. ["e2e4","e7e5",...]
+    let waitingForAI = false;
+
+    function formatMove(move) {
+      if (move.flags.includes('c')) {
+        return move.from + 'x' + move.to + (move.promotion || '');
+      } else {
+        return move.from + move.to + (move.promotion || '');
+      }
+    }
+
+    function onDropHandler(source, target) {
+      if (waitingForAI) return 'snapback';
+      const move = chess.move({ from: source, to: target, promotion: 'q' });
+      if (move === null) return 'snapback';
+
+      const formattedMove = formatMove(move); // es. "e2xe4"
+      const uciMove = formattedMove.replace('x', ''); // es. "e2e4"
+
+      gameMoves.push(uciMove);
+
+      // Invio della mossa al server
+      fetch("/post_user_move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ formatted: formattedMove, uci: uciMove })
+      });
+
+      waitingForAI = true;
+      setTimeout(() => getAIMove(), 300);
+    }
+
+    function getAIMove() {
+      fetch("/getmove", { method: "GET" })
+        .then(response => response.json())
+        .then(data => {
+          if (data.move) {
+            const move = chess.move({
+              from: data.move.slice(0, 2),
+              to: data.move.slice(2, 4),
+              promotion: data.move[4] || 'q'
+            });
+            if (move !== null) {
+              const formattedMove = formatMove(move);
+              const uciMove = formattedMove.replace('x', '');
+              gameMoves.push(uciMove);
+              board.position(chess.fen());
+            }
+          }
+          waitingForAI = false;
+        });
+    }
+
+    document.getElementById("resetGame").addEventListener("click", () => {
+      chess.reset();
+      board.start();
+      gameMoves = [];
+      waitingForAI = false;
+    });
+  </script>
+</body>
+</html>
