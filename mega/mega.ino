@@ -2,8 +2,8 @@ String buffer = "";
 bool reading = false;
 
 void setup() {
-  Serial.begin(9600);       // Monitor USB
-  Serial1.begin(9600);      // Collegato al MKR WiFi
+  Serial.begin(9600);
+  Serial1.begin(9600);
   Serial.println("\nMega pronto");
 }
 
