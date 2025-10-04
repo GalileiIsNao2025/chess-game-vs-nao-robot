@@ -1,7 +1,7 @@
 #include <WiFiNINA.h>
 
-const char* ssid = "  ";  // sostituire con ssid
-const char* password = "  ";  // sostituire con la password
+const char* ssid = "";          // sostituire con ssid
+const char* password = "";      // sostituire con la password
 
 WiFiServer server(5005);
 
