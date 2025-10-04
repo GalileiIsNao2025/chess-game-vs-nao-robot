@@ -11,7 +11,7 @@ app = Flask(__name__)
 # ==============================================================
 # Percorso a Stockfish
 # ==============================================================
-STOCKFISH_PATH = r"C:\Users\andre\OneDrive\Desktop\NAO\stockfish-windows-x86-64-avx2\stockfish\stockfish-windows-x86-64-avx2.exe"
+STOCKFISH_PATH = r""            # sostituire con il percorso a Stockfish
 
 # ==============================================================
 # Variabili globali
