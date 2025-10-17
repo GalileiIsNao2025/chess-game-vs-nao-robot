@@ -1,242 +1,155 @@
-# 🤖♟️ Nao Chess Robot – Scacchiera Fisica Interattiva
+# Nao Chess Robot – Physical Chessboard Interaction
 
-## 🧠 Descrizione del Progetto
+## Overview
+This project enables the **Nao humanoid robot** to play chess against a human opponent on a **real physical chessboard**.  
+The robot communicates with a **Flask server** running the Stockfish chess engine, and with an **Arduino MKR WiFi board** that controls a robotic arm to move the pieces.
 
-Questo progetto realizza un **sistema di scacchi interattivo fisico** in cui:
-- il robot **Nao** gioca contro un essere umano;
-- le **mosse vengono eseguite realmente** su una **scacchiera fisica** tramite un **braccio robotico controllato da Arduino MKR**;
-- il motore di gioco è **Stockfish**, integrato in un **server Flask** che gestisce logica e interfaccia;
-- Nao comunica con il server e con il microcontrollore per gestire il flusso del gioco e **parlare** con l’utente.
-
-Il sistema permette di giocare una **partita completa di scacchi fisici** tra uomo e robot, con interazione vocale e movimenti automatici dei pezzi.
+The system integrates **AI-based gameplay**, **robotic motion**, and **speech interaction**, providing a fully interactive human–robot chess experience.
 
 ---
 
-## ⚙️ Architettura del Sistema
+## System Architecture
 
-               ┌────────────────────┐
-               │   Browser / UI     │
-               │ (scacchiera web)   │
-               └─────────┬──────────┘
-                         │ (HTTP)
-                         ▼
-               ┌────────────────────┐
-               │   Flask Server     │
-               │ + Stockfish Engine │
-               └─────────┬──────────┘
-                         │ (HTTP)
-                         ▼
-               ┌────────────────────┐
-               │   Nao Robot        │
-               │ (Choregraphe Py)   │
-               └─────────┬──────────┘
-                         │ (TCP Socket)
-                         ▼
-               ┌────────────────────┐
-               │  Arduino MKR WiFi  │
-               │ + Braccio Robotico │
-               └────────────────────┘
-
----
-
-## 🧩 Componenti del Sistema
-
-### 🧠 1. Nao Robot (modulo Choregraphe)
-- Comunica con il **server Flask** via HTTP.
-- Invia e riceve mosse (utente ↔ AI).
-- Descrive a voce le mosse e lo stato della partita.
-- Controlla l’**Arduino MKR** via socket TCP.
-- Riconosce le mosse dell’utente e le conferma al server.
-
-**File principale:** `nao_chess.py`
-
-**Librerie:**  
-`socket`, `json`, `time`, `urllib2`, `naoqi`
-
-**Parametri da configurare:**
-```python
-NAO_IP = "127.0.0.1"
-NAO_PORT = 9559
-MKR_IP = "172.17.114.232"
-MKR_PORT = 5005
-FLASK_SERVER_URL = "http://172.17.114.76:5000"
+```
++------------------+          +-------------------+          +-----------------+
+|  Web Interface   | <------> |  Flask + Stockfish | <------> |  Nao Robot      |
+|  (User Moves)    |          |  (Game Logic API) |          |  (Choregraphe)  |
++------------------+          +-------------------+          +-----------------+
+                                                           |
+                                                           | TCP Socket
+                                                           ▼
+                                                  +-----------------+
+                                                  |  Arduino MKR    |
+                                                  |  (Robotic Arm)  |
+                                                  +-----------------+
 ```
 
 ---
 
-### ⚙️ 2. Server Flask con Stockfish
-- Gestisce la **logica della partita**.
-- Tiene traccia dello stato della scacchiera.
-- Interagisce con **Stockfish** per generare le mosse dell’IA.
-- Espone API per Nao e per l’interfaccia web.
+## Components
 
-**API principali:**
-| Endpoint | Metodo | Descrizione |
-|-----------|---------|-------------|
-| `/post_user_move` | POST | Riceve la mossa dell’utente |
-| `/getmove` | GET | Restituisce la mossa di Stockfish |
-| `/confirm_move` | POST | Conferma la mossa eseguita da Nao |
-| `/get_user_move` | GET | Permette a Nao di leggere la mossa dell’utente |
-| `/is_game_over` | GET | Verifica lo stato finale della partita |
+### 1. Flask Server (Python)
+- Hosts the chess game logic using the **Stockfish** engine.
+- Provides API endpoints for move exchange between human, Nao, and AI.
+- Manages game states (checkmate, draw, invalid moves).
+- Optionally serves a **web interface** for visualization and control.
 
-**Requisiti:**
+**Main dependencies:**
 ```bash
 pip install flask python-chess
 ```
 
----
-
-### 🔌 3. Arduino MKR WiFi + Braccio Robotico
-- Riceve comandi via TCP dal robot Nao (porta 5005).
-- Ogni comando rappresenta una **mossa fisica** da eseguire.
-- Controlla un **braccio robotico** (es. Dobot Magician) per spostare i pezzi.
-- Invia risposte di conferma al Nao dopo ogni mossa.
-
-**Esempio di comando ricevuto:**
-```
-utente:e2e4
-nao:e7e5
-```
-
-**Codice principale (Arduino MKR):**
-```cpp
-#include <WiFiNINA.h>
-
-const char* ssid = "SSID_WIFI";
-const char* password = "PASSWORD_WIFI";
-
-WiFiServer server(5005);
-
-void setup() {
-  Serial.begin(9600);
-  Serial1.begin(9600);
-  WiFi.begin(ssid, password);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connessione in corso...");
-  }
-
-  Serial.print("IP MKR: ");
-  Serial.println(WiFi.localIP());
-  server.begin();
-}
-
-void loop() {
-  WiFiClient client = server.available();
-  if (client) {
-    String msg = client.readStringUntil('\n');
-    msg.trim();
-
-    if (msg.length() > 0) {
-      Serial.println("Ricevuto: " + msg);
-      Serial1.print("#" + msg + ";\n"); // invia al braccio robotico
-    }
-
-    client.println("OK: " + msg);
-    client.stop();
-  }
-}
+**Run:**
+```bash
+python server.py
 ```
 
 ---
 
-### 🦾 4. Braccio Robotico
-- Esegue materialmente le mosse ricevute dall’Arduino MKR.
-- Può utilizzare un **gripper magnetico o pinza meccanica**.
-- Muove pedine in coordinate predefinite (scacchiera 8x8 calibrata).
-- Gestisce catture e depositi.
+### 2. Nao Robot (Choregraphe Python Script)
+- Communicates with the Flask server via HTTP requests.
+- Sends move commands to the **Arduino MKR** over TCP.
+- Uses **ALTextToSpeech** to describe moves verbally.
+- Detects game progress and announces results.
+
+**Configurable parameters:**
+```python
+NAO_IP = "127.0.0.1"          # Replace with actual Nao IP
+MKR_IP = "192.168.x.x"        # Arduino MKR IP
+FLASK_SERVER_URL = "http://192.168.x.x:5000"
+```
+
+**Main actions:**
+- `get_user_move()` — retrieves the human move from the server.  
+- `get_stockfish_move()` — requests the AI move.  
+- `invia_comando_mkr()` — sends movement instructions to the robotic arm.  
+- `parla()` — makes Nao speak the move aloud.
 
 ---
 
-## 🧭 Flusso Operativo del Gioco
+### 3. Arduino MKR WiFi
+- Connects to the same WiFi network as Nao and the Flask server.
+- Listens on TCP port **5005** for commands in the form `label:move`  
+  (e.g., `nao:e2e4` or `user:e7e5`).
+- Forwards commands to a serially connected **robotic arm** or actuator system.
+- Sends back acknowledgments (`OK: move`).
 
-1. **Inizio:**  
-   Nao saluta e chiede all’utente di iniziare la partita.
+**Dependencies:**
+- `WiFiNINA` library (for WiFi communication)
+- Serial communication with the robotic arm controller
 
-2. **Mossa dell’utente:**  
-   - L’utente muove una pedina (rilevata via telecamera o interfaccia web).  
-   - Il server Flask riceve la mossa e la invia a Nao.  
-   - Nao la ripete a voce (“Hai mosso da e2 a e4”) e la inoltra al MKR.
-
-3. **Mossa di Nao:**  
-   - Il server elabora la risposta di **Stockfish**.  
-   - Nao la annuncia (“Muovo da e7 a e5”).  
-   - Arduino MKR riceve il comando e muove fisicamente il pezzo con il braccio robotico.
-
-4. **Ripetizione:**  
-   Il ciclo continua finché viene raggiunto **scaccomatto** o **patta**.
-
-5. **Fine partita:**  
-   Nao annuncia il risultato (“Scaccomatto! Ho vinto!” o “Partita patta!”).
+**Example message flow:**
+```
+Flask → Nao → Arduino MKR → Dobot Arm
+```
 
 ---
 
-## 💬 Comunicazioni tra Moduli
-
-| Da → A | Tipo | Protocollo | Dati |
-|----------|----------|-------------|------|
-| Browser → Flask | HTTP | POST / GET | Mosse utente |
-| Flask → Nao | HTTP | JSON | Mosse e stato partita |
-| Nao → MKR | TCP Socket | Stringa | `nao:e7e5` |
-| MKR → Braccio | Serial | Stringa formattata | `#nao:e7e5;` |
-| MKR → Nao | TCP | OK / errore |
+### 4. Robotic Arm
+- Receives serial commands from the MKR board to physically move chess pieces.
+- Executes calibrated motion sequences for each chess coordinate.
+- Provides confirmation feedback to MKR once the move is complete.
 
 ---
 
-## 📦 Requisiti Tecnici
+## How to Run the System
 
-| Componente | Specifiche |
-|-------------|-------------|
-| Robot | Nao (Softbank Robotics) |
-| Microcontrollore | Arduino MKR WiFi 1010 |
-| Braccio robotico | Dobot Magician o simile |
-| Motore scacchistico | Stockfish |
-| Server | Python + Flask |
-| Librerie | `flask`, `python-chess`, `WiFiNINA`, `naoqi` |
+1. **Set up Flask Server**
+   - Edit `server.py` and configure the Stockfish path.
+   - Run the server and verify it listens on port 5000.
 
----
+2. **Connect Nao**
+   - Load the Choregraphe script.
+   - Update IP addresses for Nao, MKR, and Flask server.
+   - Run the main script to start interaction.
 
-## 🚀 Avvio del Sistema
+3. **Configure Arduino MKR**
+   - Flash the provided `MKR_WiFi.ino` sketch.
+   - Connect to the WiFi network.
+   - Verify IP address (shown via serial monitor).
 
-1. **Server Flask:**
-   ```bash
-   python server.py
-   ```
-   (controlla l’indirizzo IP e la porta 5000)
-
-2. **Arduino MKR:**
-   - Carica lo sketch WiFi.  
-   - Verifica la connessione e l’IP nel Serial Monitor.
-
-3. **Nao (Choregraphe):**
-   - Imposta gli IP corretti di MKR e Flask nel file Python.  
-   - Esegui lo script `nao_chess.py`.
-
-4. **Browser:**
-   - Apri l’interfaccia web (`http://<IP_FLASK>:5000`).  
-   - Inizia a giocare!
+4. **Start the Game**
+   - Open the web interface or physical board.
+   - Human makes the first move.
+   - Nao announces the move and responds with its own.
+   - The robotic arm moves the pieces accordingly.
 
 ---
 
-## 🧾 Licenza
+## Repository Structure
 
-Questo progetto è rilasciato sotto **licenza MIT**, eccetto:
-- **Stockfish**, distribuito sotto **GPLv3**;
-- **NAOqi SDK**, soggetto alle licenze SoftBank Robotics.
-
----
-
-## 👨‍💻 Autori
-
-**Progetto realizzato da:**  
-Andrea Peerani e team  
-
-**Data:** Ottobre 2025  
-**Versione:** 1.0  
+```
+/
+├── server/                 # Flask + Stockfish server code
+├── nao/                    # Choregraphe Python scripts
+├── arduino/                # Arduino MKR WiFi firmware
+├── web/                    # Optional web interface files
+└── README.md               # Project documentation
+```
 
 ---
 
-## 📸 Demo (opzionale)
+## Technologies Used
+- **Naoqi SDK (Python)** – Robot control and speech
+- **Flask (Python)** – Web and API framework
+- **Stockfish Engine** – Chess AI backend
+- **Arduino MKR WiFi 1010** – Networked microcontroller
+- **Dobot Arm / Custom Arm** – Chess piece manipulation
+- **WiFiNINA Library** – Network stack for Arduino
 
-> *In questa configurazione, Nao annuncia le mosse, il braccio robotico muove i pezzi e la scacchiera fisica visualizza la partita in tempo reale.*
+---
+
+## License
+This project is released under the **MIT License**, except for third-party components:
+- **Stockfish** – licensed under **GPLv3**
+- **NAOqi SDK** – proprietary by SoftBank Robotics
+
+---
+
+## Credits
+Developed as part of a collaborative robotics project integrating AI and physical interaction.
+
+**Contributors:**
+- Nao Robotics Development Team
+- Arduino Integration Engineers
+- AI & Vision Research Unit
